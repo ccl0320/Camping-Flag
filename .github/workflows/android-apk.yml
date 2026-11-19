@@ -62,14 +62,36 @@ jobs:
         run: |
           sed -i -E "s/versionCode [0-9]+/versionCode ${BUILD}/; s/versionName \"[^\"]*\"/versionName \"1.0.${BUILD}\"/" android/app/build.gradle
           grep -E "versionCode|versionName" android/app/build.gradle
-          mkdir -p ~/.android && cp signing.keystore ~/.android/debug.keystore
+          # 固定簽章：每一版都用 repo 裡同一把金鑰，才能直接覆蓋安裝
+          cat >> android/app/build.gradle <<'GRADLE'
+
+          android {
+              signingConfigs {
+                  stable {
+                      storeFile file("../../signing.keystore")
+                      storePassword "android"
+                      keyAlias "androiddebugkey"
+                      keyPassword "android"
+                  }
+              }
+              buildTypes {
+                  debug { signingConfig signingConfigs.stable }
+                  release { signingConfig signingConfigs.stable; minifyEnabled false }
+              }
+          }
+          GRADLE
 
       - name: Build APK
         working-directory: android-app/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
-          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/camping-flag.apk"
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          APK=app/build/outputs/apk/release/app-release.apk
+          APKSIGNER=$(ls -d $ANDROID_HOME/build-tools/*/ | sort -V | tail -1)apksigner
+          "$APKSIGNER" verify --print-certs "$APK" | tee certs.txt
+          # 簽章必須是固定金鑰（SHA-256 6e676e6d…），否則不發布
+          grep -qi "6e676e6d66a45054173f35d69122a1faeee2ca0b229c9537a7f2976fd27acf96" certs.txt
+          cp "$APK" "$GITHUB_WORKSPACE/camping-flag.apk"
 
       - uses: actions/upload-artifact@v4
         with:
