@@ -229,7 +229,7 @@ const COUNTY_ORDER = ['臺北市','新北市','基隆市','桃園市','新竹市
 const SHORT = n => /^(新竹|嘉義)/.test(n) ? n : n.replace(/[縣市]$/,'');
 
 /* ---------- Supabase sb sync ---------- */
-const SUPA_DEFAULT = { url: '', key: '' };   // 填入 Project URL 與 anon public key 即可讓所有訪客讀到雲端資料
+const SUPA_DEFAULT = { url: 'https://vpvftdwnkxocfqfunmrt.supabase.co', key: 'sb_publishable_18FlVXd-olquZKSI1G2bCw_wJQAEn_t' };   // 填入 Project URL 與 anon public key 即可讓所有訪客讀到雲端資料
 const SUPA_TABLE = 'camping_state', SUPA_ROW = 'main';
 const sb = { client:null, session:null, ready:false, err:'', cfg:null, loading:false };
 function supaCfg(){ let c = null; try{ c = JSON.parse(localStorage.getItem('camping-supa-cfg')||'null'); }catch(e){} return (c && c.url && c.key) ? c : (SUPA_DEFAULT.url && SUPA_DEFAULT.key ? SUPA_DEFAULT : null); }

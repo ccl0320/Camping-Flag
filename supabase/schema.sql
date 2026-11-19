@@ -24,3 +24,6 @@ create policy "owner insert" on public.camping_state
 drop policy if exists "owner update" on public.camping_state;
 create policy "owner update" on public.camping_state
   for update to authenticated using (owner = auth.uid()) with check (owner = auth.uid());
+
+-- 實際部署（English-Island 專案）：因該專案還有其他玩家帳號，
+-- 不開放 insert；資料列由管理者以 Jerry 的帳號建立後，只允許擁有者 update。
