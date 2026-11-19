@@ -22,3 +22,11 @@
 > 想讓訪客不用設定就讀到雲端資料：把 `index.html` 裡 `SUPA_DEFAULT` 的 `url`、`key` 填上（anon key 本來就是公開金鑰，安全靠 RLS 保護）。
 
 地圖資料：[taiwan-atlas](https://github.com/dkaoster/taiwan-atlas)（政府資料開放授權）
+
+
+## 多使用者帳號（v2）
+
+- 任何人都可以用 Email 註冊，登入後只會看到、也只能修改自己的紀錄（資料表 `camping_logs`，每位使用者一列，RLS 保護）。
+- 沒登入也能先試用，紀錄暫存在瀏覽器；註冊後會自動帶進帳號。
+- 在「我的帳號」打開「公開我的露營足跡」，就能把 `?u=<使用者 ID>` 的連結分享給朋友（唯讀）。
+- Supabase 後台需要設定：Authentication → URL Configuration，把網站網址加進 Redirect URLs（例如 `https://camping-flag.pages.dev/**`），確認信與重設密碼信才會導回本站。
