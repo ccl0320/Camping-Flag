@@ -30,3 +30,10 @@
 - 沒登入也能先試用，紀錄暫存在瀏覽器；註冊後會自動帶進帳號。
 - 在「我的帳號」打開「公開我的露營足跡」，就能把 `?u=<使用者 ID>` 的連結分享給朋友（唯讀）。
 - Supabase 後台需要設定：Authentication → URL Configuration，把網站網址加進 Redirect URLs（例如 `https://camping-flag.pages.dev/**`），確認信與重設密碼信才會導回本站。
+
+## Android App（APK）
+
+- 每次推送到 `main`（改到 `index.html` 或 `android-app/`），GitHub Actions 會自動打包 APK，發佈到 [Releases](https://github.com/ccl0320/Camping-Flag/releases/latest)。
+- 手機直接下載：<https://github.com/ccl0320/Camping-Flag/releases/latest/download/camping-flag.apk>
+- App 開啟或從背景切回時會自動檢查新版（每 30 分鐘最多一次）；「我的帳號」裡也能手動「檢查更新」。
+- 每一版都用 `android-app/signing.keystore` 簽章，新版可以直接覆蓋安裝，紀錄不會不見。

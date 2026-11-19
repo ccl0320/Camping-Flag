@@ -4,3 +4,4 @@ supabase
 README.md
 wrangler.jsonc
 .assetsignore
+android-app

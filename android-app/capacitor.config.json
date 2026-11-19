@@ -1,0 +1,9 @@
+{
+  "appId": "com.ccl0320.campingflag",
+  "appName": "露營足跡",
+  "webDir": "www",
+  "backgroundColor": "#F4EFE7",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "force"
+  }
+}

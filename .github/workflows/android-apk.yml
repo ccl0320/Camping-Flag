@@ -1,0 +1,86 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'android-app/**'
+      - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      BUILD: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Prepare web bundle (inject build number)
+        working-directory: android-app
+        run: |
+          mkdir -p www
+          sed "s#</head>#<script>window.__APP_BUILD__=${BUILD};</script></head>#" ../index.html > www/index.html
+          grep -c "__APP_BUILD__=${BUILD}" www/index.html
+
+      - name: Create Capacitor Android project
+        working-directory: android-app
+        run: |
+          npm install --no-audit --no-fund
+          npx cap add android
+          npx @capacitor/assets generate --android --iconBackgroundColor '#E8DEC6' --splashBackgroundColor '#F4EFE7' || echo "::warning::icon generation skipped"
+          npx cap sync android
+
+      - name: Set version and signing key
+        working-directory: android-app
+        run: |
+          sed -i -E "s/versionCode [0-9]+/versionCode ${BUILD}/; s/versionName \"[^\"]*\"/versionName \"1.0.${BUILD}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+          mkdir -p ~/.android && cp signing.keystore ~/.android/debug.keystore
+
+      - name: Build APK
+        working-directory: android-app/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/camping-flag.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: camping-flag-apk-v${{ github.run_number }}
+          path: camping-flag.apk
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-v${{ github.run_number }}
+          name: 露營足跡 App v${{ github.run_number }}
+          make_latest: true
+          files: camping-flag.apk
+          body: |
+            ## 安裝
+            - 用手機點下方 **camping-flag.apk** 下載，打開後選「安裝」。
+            - 第一次安裝需允許瀏覽器「安裝不明來源的應用程式」。
+            - 之後 App 會自動檢查更新，有新版會跳出提示。
+
+            ## 這一版
+            - 建置自 ${{ github.sha }}
