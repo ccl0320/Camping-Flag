@@ -177,6 +177,7 @@ a.btn{color:inherit;text-decoration:none;display:inline-block}
 .updbar div{flex:1;display:flex;flex-direction:column;gap:2px;font-size:14px}
 .updbar span{font-size:12px;color:var(--muted)}
 body{padding-top:env(safe-area-inset-top)}
+
 /* calendar */
 .cal{padding:12px 16px 16px}
 .calhead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -224,6 +225,44 @@ body{padding-top:env(safe-area-inset-top)}
   .panel{max-height:75vh}
   .stat{padding:12px 14px;gap:10px}
   .stat .ic svg{width:28px;height:28px}
+}
+.mnav,.mtop{display:none}
+@media (max-width:860px){
+  .wrap{padding:10px 12px calc(84px + env(safe-area-inset-bottom))}
+  .mnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;background:rgba(251,248,243,.97);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:4px 10px calc(4px + env(safe-area-inset-bottom));box-shadow:0 -6px 18px rgba(70,55,35,.06)}
+  .mnav button{flex:1;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:1px;font-size:12px;color:var(--muted);padding:7px 0 5px;letter-spacing:.1em;-webkit-tap-highlight-color:transparent}
+  .mnav button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+  .mnav button.on{color:var(--forest);font-weight:600}
+  .mnav button.on svg{stroke:var(--terra)}
+  .status{position:fixed;left:0;right:0;bottom:calc(74px + env(safe-area-inset-bottom));z-index:55;text-align:center;margin:0;pointer-events:none}
+  .status:empty{display:none}
+  .status:not(:empty){width:max-content;max-width:86vw;margin:0 auto;background:rgba(63,58,51,.88);color:#fff;border-radius:999px;padding:6px 14px;font-size:12.5px}
+  .updbar{bottom:calc(80px + env(safe-area-inset-bottom))}
+  /* 首頁 */
+  .mt-home .hero{height:200px}
+  .mt-home .years,.mt-home .grid{display:none}
+  /* 地圖、行程：一頁裝滿，不往下捲 */
+  .mt-map,.mt-trips{height:100vh;height:100dvh;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;padding-top:12px}
+  .mt-map>.hero,.mt-map>.tiles,.mt-map>.stats,.mt-map>.next,.mt-map>.welcome,
+  .mt-trips>.hero,.mt-trips>.tiles,.mt-trips>.stats,.mt-trips>.next,.mt-trips>.welcome,.mt-trips>.years{display:none}
+  .mtop{align-items:center;justify-content:space-between;gap:10px;margin:0 2px 10px;flex-shrink:0}
+  .mt-map .mtop,.mt-trips .mtop{display:flex}
+  .mtop h2{font-family:var(--serif);font-size:22px;margin:0;line-height:1.2;letter-spacing:.08em}
+  .mtop .btn{white-space:nowrap}
+  .mt-map .viewbar,.mt-trips .viewbar{margin:0 0 8px;flex-shrink:0;font-size:13px;padding:6px 12px}
+  .mt-map .years{flex-wrap:nowrap;overflow-x:auto;margin-bottom:8px;flex-shrink:0;scrollbar-width:none;padding-bottom:2px}
+  .mt-map .years::-webkit-scrollbar{display:none}
+  .mt-map .years .chip{flex-shrink:0}
+  .mt-map .grid,.mt-trips .grid{flex:1;min-height:0;display:flex;flex-direction:column;align-items:stretch;gap:10px}
+  .mt-map .mapcard{flex:1 1 56%;min-height:0;border-radius:18px}
+  .mt-map #gl{aspect-ratio:auto;height:100%;min-height:0;max-height:none}
+  .mt-map .mapcard:not(.has3d) svg#map{height:100%;max-height:none}
+  .mt-map .panel{flex:1 1 44%;min-height:0;max-height:none;border-radius:18px}
+  .mt-map .tabs [data-tab=cal],.mt-map .tabs [data-tab=plans]{display:none}
+  .mt-trips .mapcard{display:none}
+  .mt-trips .panel{flex:1;min-height:0;max-height:none}
+  .mt-trips .tabs [data-tab=timeline],.mt-trips .tabs [data-tab=sites],.mt-trips .tabs [data-tab=counties]{display:none}
+  .mt-map .legend{font-size:11px}
 }
 </style>
 </head>
@@ -543,13 +582,25 @@ function countyAt(lng, lat){
 }
 
 /* ---------- UI state ---------- */
-const ui = { view:null, calMonth:null, calDay:null, tab:'timeline', year:'all', siteSel:null, picking:false, form:null, rating:0 };
+const ui = { mtab:'home', view:null, calMonth:null, calDay:null, tab:'timeline', year:'all', siteSel:null, picking:false, form:null, rating:0 };
 
 function filtered(){ const d = S.trips.filter(t=>!isPlan(t)); return ui.year==='all' ? d : d.filter(t => yearOf(t)===ui.year); }
 function plans(){ return S.trips.filter(isPlan).sort((a,b)=>(a.start||'').localeCompare(b.start||'')); }
 const BOOK = {want:'想去',tbc:'待確認',booked:'已預訂',paid:'已付訂金'};
 
 /* ---------- render ---------- */
+function isMobile(){ return window.matchMedia('(max-width:860px)').matches; }
+function mtopHTML(trips, nSites){
+  if(ui.mtab === 'map'){
+    const num = numbering(); const done = ui.year === 'all' ? Math.max(0, ...trips.map(x => num[x.id]).filter(x => x != null)) : trips.length;
+    return `<div class="mtop"><div><h2>地圖</h2><span class="hint">${ui.year === 'all' ? '' : ui.year + ' 年 · '}${done} 露 · ${nSites} 處露營區</span></div>${readOnly ? '' : `<button class="btn primary sm" data-act="add">＋ 新增一露</button>`}</div>`;
+  }
+  if(ui.mtab === 'trips'){
+    const n = plans().length;
+    return `<div class="mtop"><div><h2>行程</h2><span class="hint">${n ? n + ' 個計畫中的行程' : '還沒有排行程'}</span></div>${readOnly ? '' : `<button class="btn primary sm" data-act="addplan">＋ 加入計畫</button>`}</div>`;
+  }
+  return '';
+}
 function render(){
   const trips = filtered(), num = numbering();
   const visitedSites = new Set(trips.map(t => t.siteId));
@@ -560,6 +611,12 @@ function render(){
   const maxC = Math.max(1, ...Object.values(countyCount));
 
   const root = document.getElementById('root');
+  if(isMobile()){
+    if(ui.siteSel && ui.mtab === 'home'){ ui.mtab = 'map'; if(['cal','plans'].includes(ui.tab)) ui.tab = 'timeline'; }
+    if(ui.mtab === 'trips' && !['cal','plans'].includes(ui.tab)) ui.tab = 'cal';
+    if(ui.mtab === 'map' && ['cal','plans'].includes(ui.tab)) ui.mtab = 'trips';
+  }
+  root.className = 'wrap mt-' + ui.mtab;
   root.innerHTML = `
   <section class="hero">${scene('h')}<div class="ttl">${ICON.mt}<h1>${view.name && (view.mode==='own'||view.mode==='public') ? esc(view.name)+' 的露營足跡' : '露營足跡'}</h1><p>Camping Log · Taiwan</p></div></section>
   <div class="tiles">
@@ -567,6 +624,7 @@ function render(){
     ${readOnly ? '' : `<button class="tile" data-act="addplan">${ICON.cal}<span>加入計畫</span></button><button class="tile primary" data-act="add">${ICON.plus}<span>新增一露</span></button>`}
   </div>
   ${viewBanner()}
+  ${mtopHTML(trips, visitedSites.size)}
   <div class="stats">
     <div class="stat"><div class="ic">${ICON.tent}</div><div><div class="v">${ui.year==='all' ? (Math.max(0, ...trips.map(x=>num[x.id]).filter(x=>x!=null))) : trips.length}<small>露</small></div><div class="l">${ui.year==='all'?'累積露營':ui.year+' 年露營'}</div></div></div>
     <div class="stat"><div class="ic">${ICON.moon}</div><div><div class="v">${totalNights}<small>晚</small></div><div class="l">睡在帳篷裡</div></div></div>
@@ -587,6 +645,7 @@ function render(){
     <div class="panel">${panelHTML(trips, num, countyCount, maxC)}</div>
   </div>
   <div class="status ${statusWarn?'warn':''}" id="status">${esc(statusMsg)}</div>
+  <nav class="mnav">${[['home','首頁',ICON.tent],['map','地圖',ICON.pin],['trips','行程',ICON.cal]].map(([k,l,ic]) => `<button data-mtab="${k}" class="${ui.mtab===k?'on':''}">${ic}<span>${l}</span></button>`).join('')}</nav>
   <div class="modal-bg" id="modal"><div class="modal" id="modalBox"></div></div>`;
   bind();
   if(M3){
@@ -1142,6 +1201,13 @@ function bind(){
   const root = document.getElementById('root');
   root.querySelectorAll('[data-year]').forEach(b => b.onclick = () => { ui.year = b.dataset.year; render(); });
   root.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { ui.tab = b.dataset.tab; render(); });
+  root.querySelectorAll('[data-mtab]').forEach(b => b.onclick = () => {
+    const k = b.dataset.mtab; if(k === ui.mtab && !ui.siteSel) return;
+    ui.mtab = k; ui.siteSel = null;
+    if(k === 'trips' && !['cal','plans'].includes(ui.tab)) ui.tab = 'cal';
+    if(k === 'map' && ['cal','plans'].includes(ui.tab)) ui.tab = 'timeline';
+    render(); window.scrollTo(0, 0);
+  });
   root.querySelectorAll('.panel [data-site], .next[data-site]').forEach(el => el.onclick = () => { ui.siteSel = el.dataset.site; focusSite(ui.siteSel); render(); });
   root.querySelectorAll('[data-trip]').forEach(el => el.onclick = () => { if(!readOnly) openForm(false, S.trips.find(t=>t.id===el.dataset.trip)); });
   const act = (n, f) => root.querySelectorAll(`[data-act="${n}"]`).forEach(b => b.onclick = f);
