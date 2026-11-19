@@ -204,6 +204,76 @@ if(!S || !Array.isArray(S.trips)) S = {version:1, sites:[], trips:[]};
 const COUNTY_ORDER = ['臺北市','新北市','基隆市','桃園市','新竹市','新竹縣','苗栗縣','臺中市','彰化縣','南投縣','雲林縣','嘉義市','嘉義縣','臺南市','高雄市','屏東縣','宜蘭縣','花蓮縣','臺東縣','澎湖縣','金門縣','連江縣'];
 const SHORT = n => /^(新竹|嘉義)/.test(n) ? n : n.replace(/[縣市]$/,'');
 
+/* ---------- Supabase sb sync ---------- */
+const SUPA_DEFAULT = { url: '', key: '' };   // 填入 Project URL 與 anon public key 即可讓所有訪客讀到雲端資料
+const SUPA_TABLE = 'camping_state', SUPA_ROW = 'main';
+const sb = { client:null, session:null, ready:false, err:'', cfg:null, loading:false };
+function supaCfg(){ let c = null; try{ c = JSON.parse(localStorage.getItem('camping-supa-cfg')||'null'); }catch(e){} return (c && c.url && c.key) ? c : (SUPA_DEFAULT.url && SUPA_DEFAULT.key ? SUPA_DEFAULT : null); }
+function loadSupaLib(){ return new Promise((ok, bad) => { if(window.supabase && window.supabase.createClient) return ok(); const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'; s.onload = ok; s.onerror = () => bad(new Error('無法載入 Supabase 套件')); document.head.appendChild(s); }); }
+async function cloudInit(){
+  sb.cfg = supaCfg(); if(!sb.cfg) return;
+  try{
+    await loadSupaLib();
+    sb.client = window.supabase.createClient(sb.cfg.url, sb.cfg.key, { auth:{ persistSession:true, storageKey:'camping-supa-auth' } });
+    const { data } = await sb.client.auth.getSession(); sb.session = data.session;
+    sb.client.auth.onAuthStateChange((_e, s) => { sb.session = s; renderCloudBadge(); });
+    sb.ready = true; await cloudPull(true);
+    document.addEventListener('visibilitychange', () => { if(document.visibilityState==='visible') cloudPull(false); });
+  }catch(e){ sb.err = e.message || String(e); }
+  renderCloudBadge();
+}
+async function cloudPull(first){
+  if(!sb.ready || sb.loading) return; sb.loading = true;
+  try{
+    const { data, error } = await sb.client.from(SUPA_TABLE).select('data,updated_at').eq('id', SUPA_ROW).maybeSingle();
+    if(error) throw error;
+    if(data && data.data && Array.isArray(data.data.trips)){
+      const changed = JSON.stringify(data.data) !== JSON.stringify(S);
+      if(changed){ S = data.data; lsSet(); if(!document.querySelector('.modal-bg.show')) render(); }
+      sb.updated = data.updated_at; sb.err = '';
+    } else if(first && sb.session && S.trips.length){ await cloudPush(); }
+  }catch(e){ sb.err = '讀取雲端失敗：' + (e.message||e); }
+  sb.loading = false; renderCloudBadge();
+}
+async function cloudPush(){
+  if(!sb.ready) return false;
+  if(!sb.session){ setStatus('已存在這個瀏覽器；登入雲端後才會同步到 Supabase', true); return false; }
+  const { error } = await sb.client.from(SUPA_TABLE).upsert({ id: SUPA_ROW, data: S, updated_at: new Date().toISOString() });
+  if(error){ sb.err = '雲端儲存失敗：' + error.message; setStatus(sb.err, true); renderCloudBadge(); return false; }
+  sb.err = ''; sb.updated = new Date().toISOString(); setStatus('已同步到雲端 ☁️'); renderCloudBadge(); return true;
+}
+function cloudLabel(){
+  if(!sb.cfg) return '☁️ 雲端未設定';
+  if(sb.err) return '⚠️ 雲端錯誤';
+  if(!sb.ready) return '☁️ 連線中…';
+  return sb.session ? '☁️ 已同步' : '☁️ 唯讀（未登入）';
+}
+function renderCloudBadge(){ const b = document.querySelector('[data-act="cloud"]'); if(b) b.textContent = cloudLabel(); }
+function openCloud(){
+  const c = supaCfg() || {url:'',key:''};
+  const email = sb.session && sb.session.user ? sb.session.user.email : '';
+  const box = modal(`<h3>雲端同步（Supabase）</h3>
+    <div class="note" style="margin:0 0 12px">${sb.err ? '⚠️ '+esc(sb.err) : (sb.ready ? (sb.session ? `已登入 ${esc(email)}，所有變更會即時同步。` : '已連線，可讀取雲端資料；登入後才能寫入。') : '尚未連線。填入 Supabase 專案資訊即可開始。')}${sb.updated ? `<br><span class="hint">雲端最後更新：${new Date(sb.updated).toLocaleString('zh-TW')}</span>` : ''}</div>
+    <div class="f"><label>Project URL</label><input id="cUrl" value="${esc(c.url)}" placeholder="https://xxxx.supabase.co"></div>
+    <div class="f"><label>anon public key</label><input id="cKey" value="${esc(c.key)}" placeholder="eyJhbGciOi..."></div>
+    <div class="row"><button class="btn sm" id="cSave">儲存設定並連線</button></div>
+    ${sb.ready ? (sb.session ? `<div class="row"><button class="btn sm primary" id="cPush">把目前資料上傳到雲端</button><button class="btn sm" id="cPull">從雲端重新載入</button><button class="btn sm" id="cOut">登出</button></div>`
+      : `<div class="f2"><div class="f"><label>Email</label><input id="cEmail" type="email" autocomplete="username"></div><div class="f"><label>密碼</label><input id="cPw" type="password" autocomplete="current-password"></div></div><div class="row"><button class="btn sm primary" id="cIn">登入</button></div>`) : ''}
+    <div class="err" id="cErr"></div>
+    <div class="mfoot"><span class="hint">設定只存在這台裝置</span><button class="btn" id="cClose">關閉</button></div>`);
+  const $ = id => box.querySelector('#'+id); const err = m => $('cErr').textContent = m;
+  $('cClose').onclick = closeModal;
+  $('cSave').onclick = async () => { const url = $('cUrl').value.trim().replace(/\/$/,''), key = $('cKey').value.trim();
+    if(!/^https:\/\/.+\.supabase\.co$/.test(url) || key.length < 20) return err('請確認 URL 與 key 格式');
+    try{ localStorage.setItem('camping-supa-cfg', JSON.stringify({url, key})); }catch(e){}
+    sb.ready = false; sb.err = ''; await cloudInit(); openCloud(); };
+  if($('cIn')) $('cIn').onclick = async () => { const { error } = await sb.client.auth.signInWithPassword({ email:$('cEmail').value.trim(), password:$('cPw').value });
+    if(error) return err('登入失敗：' + error.message); await cloudPull(true); openCloud(); };
+  if($('cOut')) $('cOut').onclick = async () => { await sb.client.auth.signOut(); openCloud(); };
+  if($('cPush')) $('cPush').onclick = async () => { if(await cloudPush()) { err(''); openCloud(); } };
+  if($('cPull')) $('cPull').onclick = async () => { await cloudPull(false); openCloud(); };
+}
+
 /* ---------- persistence ---------- */
 let art = null, canPublish = false, readOnly = false, saveTimer = null;
 let statusMsg = '', statusWarn = false;
@@ -226,6 +296,7 @@ function genDoc(){
 }
 function save(){
   lsSet();
+  if(sb.ready){ clearTimeout(saveTimer); setStatus('同步中…'); saveTimer = setTimeout(cloudPush, 400); if(!canPublish) return; }
   if(!canPublish){ setStatus(art===null ? '目前只存在這個瀏覽器（此檢視無法儲存到網站）' : '', true); return; }
   setStatus('儲存中…');
   clearTimeout(saveTimer);
@@ -297,7 +368,7 @@ function render(){
   <header class="top">
     <div class="brand">${HEADER_ART}<div><h1>露營<span>足跡</span></h1><p>CAMPING LOG · TAIWAN</p></div></div>
     <div class="actions">
-      <button class="btn" data-act="backup">備份 / 匯入</button>
+      <button class="btn" data-act="cloud">${cloudLabel()}</button><button class="btn" data-act="backup">備份 / 匯入</button>
       ${readOnly ? '' : '<button class="btn" data-act="addplan">📅 加入計畫</button><button class="btn primary" data-act="add">＋ 新增一露</button>'}
     </div>
   </header>
@@ -852,6 +923,7 @@ function bind(){
   act('editsite', () => openSiteForm(siteById(ui.siteSel)));
   act('delsite', () => delSite(siteById(ui.siteSel)));
   act('backup', openBackup);
+  act('cloud', openCloud);
   act('cancelpick', () => { ui.picking = false; render(); });
 
   const svg = document.getElementById('map'), tip = document.getElementById('tip'), card = document.getElementById('mapcard');
@@ -1076,12 +1148,13 @@ if(M3){
 }
 if(!S.trips.length && !S.sites.length){ const l = lsGet(); if(l && Array.isArray(l.trips) && l.trips.length) S = l; }
 render();
+cloudInit();
 (async () => {
   try{
     art = window.claude && window.claude.use ? await window.claude.use('artifact') : null;
   }catch(e){ art = null; }
   canPublish = !!(art && art.publish);
-  if(!canPublish) setStatus('目前只存在這個瀏覽器（此檢視無法儲存到網站）', true);
+  if(!canPublish && !sb.cfg) setStatus('目前只存在這個瀏覽器（此檢視無法儲存到網站）', true);
 })();
 })();
 </script>

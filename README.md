@@ -12,6 +12,13 @@
 ## 使用
 直接打開 `index.html`，或啟用 GitHub Pages（Settings → Pages → Branch: `main` / root）。
 
-> 在 GitHub Pages 上新增的紀錄會存在瀏覽器（localStorage）。要永久更新網站資料，請用「備份 / 匯入」複製 JSON，替換 `index.html` 內 `<script id="state">` 的內容後提交。
+## Supabase 雲端同步
+1. 在 [Supabase](https://supabase.com) 建立專案，到 **SQL Editor** 執行 [`supabase/schema.sql`](supabase/schema.sql)。
+2. **Authentication → Users → Add user** 建立自己的帳號（Email + 密碼）。
+3. **Project Settings → API** 複製 `Project URL` 與 `anon public` key。
+4. 打開網站右上角 **☁️ 雲端** → 貼上 URL 與 key → 登入 → 「把目前資料上傳到雲端」。
+5. 之後在任何裝置登入，新增/修改都會自動同步；未登入的訪客只能讀取。
+
+> 想讓訪客不用設定就讀到雲端資料：把 `index.html` 裡 `SUPA_DEFAULT` 的 `url`、`key` 填上（anon key 本來就是公開金鑰，安全靠 RLS 保護）。
 
 地圖資料：[taiwan-atlas](https://github.com/dkaoster/taiwan-atlas)（政府資料開放授權）
