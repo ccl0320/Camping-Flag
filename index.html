@@ -378,7 +378,7 @@ async function saveProfile(patch){
   if('is_public' in patch) view.isPublic = patch.is_public;
   return '';
 }
-function shareURL(uid){ return SITE_BASE ? SITE_BASE.replace(/\/$/,'') + '/?u=' + uid : ''; }
+function shareURL(uid){ if(!SITE_BASE) return ''; const b = /\/$|\.html?$/i.test(SITE_BASE) ? SITE_BASE : SITE_BASE + '/'; return b + '?u=' + uid; }
 function cloudLabel(){
   if(!sb.cfg) return '☁️ 本機模式';
   if(sb.err) return '⚠️ 雲端錯誤';
