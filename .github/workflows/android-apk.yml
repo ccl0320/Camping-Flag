@@ -43,8 +43,11 @@ jobs:
         working-directory: android-app
         run: |
           mkdir -p www
-          sed "s#</head>#<script>window.__APP_BUILD__=${BUILD};</script></head>#" ../index.html > www/index.html
-          grep -c "__APP_BUILD__=${BUILD}" www/index.html
+          # 只替換第一個 </head>（程式碼字串裡也有 </head>，不能動）
+          sed "0,/<\/head>/s##<script>window.__APP_BUILD__=${BUILD};</script></head>#" ../index.html > www/index.html
+          n=$(grep -o "__APP_BUILD__=${BUILD}" www/index.html | wc -l)
+          echo "injected: $n"; test "$n" -eq 1
+          node -e "const h=require('fs').readFileSync('www/index.html','utf8');const m=[...h.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)];let bad=0;for(const s of m){if(/json/.test(s[0].slice(0,60)))continue;try{new Function(s[1])}catch(e){bad++;console.error(e.message)}}console.log('scripts ok:',m.length-bad,'bad:',bad);process.exit(bad?1:0)"
 
       - name: Create Capacitor Android project
         working-directory: android-app
