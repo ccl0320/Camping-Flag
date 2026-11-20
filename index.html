@@ -262,6 +262,8 @@ body{padding-top:env(safe-area-inset-top)}
   .mnav button.on svg{stroke:var(--terra)}
   .status{position:fixed;left:0;right:0;bottom:calc(74px + env(safe-area-inset-bottom));z-index:55;text-align:center;margin:0;pointer-events:none}
   .status:empty{display:none}
+  .status:not(:empty){animation:toastIn .2s ease-out}
+  @keyframes toastIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .status:not(:empty){width:max-content;max-width:86vw;margin:0 auto;background:rgba(63,58,51,.88);color:#fff;border-radius:999px;padding:6px 14px;font-size:12.5px}
   .updbar{bottom:calc(80px + env(safe-area-inset-bottom))}
   /* 首頁 */
@@ -597,7 +599,7 @@ function genDoc(){
 function save(){
   lsSet();
   if(readOnly) return;
-  if(sb.ready && view.mode === 'own'){ clearTimeout(saveTimer); setStatus('同步中…'); saveTimer = setTimeout(cloudPush, 400); return; }
+  if(sb.ready && view.mode === 'own'){ clearTimeout(saveTimer); saveTimer = setTimeout(cloudPush, 400); return; }
   if(sb.ready && view.mode === 'guest'){ setStatus('已暫存在這台裝置，註冊或登入後會帶進你的帳號'); return; }
   if(!canPublish){ setStatus(art===null ? '目前只存在這個瀏覽器（此檢視無法儲存到網站）' : '', true); return; }
   setStatus('儲存中…');
@@ -612,7 +614,13 @@ function save(){
     }
   }, 350);
 }
-function setStatus(m, warn){ statusMsg = m||''; statusWarn = !!warn; const el = document.getElementById('status'); if(el){ el.textContent = statusMsg; el.className = 'status' + (statusWarn?' warn':''); } }
+let statusTimer = null;
+function setStatus(m, warn){
+  statusMsg = m||''; statusWarn = !!warn;
+  const el = document.getElementById('status'); if(el){ el.textContent = statusMsg; el.className = 'status' + (statusWarn?' warn':''); }
+  clearTimeout(statusTimer);
+  if(statusMsg) statusTimer = setTimeout(() => setStatus(''), statusWarn ? 6000 : 2000);   // 提示短暫出現後自動消失
+}
 
 /* ---------- helpers ---------- */
 const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-3);
