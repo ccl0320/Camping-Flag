@@ -173,6 +173,32 @@ a.btn{color:inherit;text-decoration:none;display:inline-block}
 .viewbar a{margin-left:10px;color:var(--terra);text-decoration:underline}
 .chk{display:flex;gap:8px;align-items:center;cursor:pointer}
 .chk input{width:auto}
+.wx{font-size:12.5px;color:var(--muted)}
+.wx:empty{display:none}
+.wx-mini,.wx-past{margin-top:3px}
+.wx-up{padding:0 0 6px 100px;margin-top:-4px}
+.wxi{font-size:15px;margin-right:3px;font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif}
+.wx-trip{margin-top:8px}
+.wxdays{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.wxdays::-webkit-scrollbar{display:none}
+.wxd{flex:0 0 auto;min-width:62px;display:flex;flex-direction:column;align-items:center;gap:0;background:#FBF8F3;border:1px solid var(--line);border-radius:12px;padding:6px 6px 5px;font-size:12px;color:var(--ink);line-height:1.35}
+.wxd b{font-family:var(--serif);font-size:13px}
+.wxd small{color:var(--muted);font-size:11px;min-height:14px}
+.wxd .wxi{font-size:20px;margin:1px 0}
+.wxd.today{border-color:var(--terra);background:#FFF6EE}
+.wxtips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.wxtips span{background:#F3E9DA;color:#7A4A2A;border-radius:999px;padding:2px 9px;font-size:12px}
+.wxbox{margin:10px 0 4px}
+.wxrows{display:flex;flex-direction:column;gap:1px}
+.wxr{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);white-space:nowrap}
+.wxr b{font-family:var(--serif);font-weight:600;min-width:58px}
+.wxr .wxi{font-size:15px;margin:0}
+.wxr small{color:var(--muted)}
+.wx-trip .wxtips span{font-size:11.5px;padding:1px 8px}
+.next>div:nth-child(2){min-width:0;flex:1}
+.wxbox h4{margin:0 0 6px;font-size:13.5px;font-family:var(--serif);color:var(--ink)}
+@media (max-width:860px){ .wx-up{padding-left:0} .next .wxd{min-width:56px} }
+
 .updbar{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:80;display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--terra);border-radius:14px;box-shadow:0 12px 30px rgba(60,45,30,.22);padding:12px 14px;max-width:560px;margin:0 auto}
 .updbar div{flex:1;display:flex;flex-direction:column;gap:2px;font-size:14px}
 .updbar span{font-size:12px;color:var(--muted)}
@@ -648,6 +674,7 @@ function render(){
   <nav class="mnav">${[['home','首頁',ICON.tent],['map','地圖',ICON.pin],['trips','行程',ICON.cal]].map(([k,l,ic]) => `<button data-mtab="${k}" class="${ui.mtab===k?'on':''}">${ic}<span>${l}</span></button>`).join('')}</nav>
   <div class="modal-bg" id="modal"><div class="modal" id="modalBox"></div></div>`;
   bind();
+  fillWeather();
   if(M3){
     const cnt = {}; trips.forEach(t => cnt[t.siteId] = (cnt[t.siteId]||0)+1);
     const pl = {}; plans().forEach(t => pl[t.siteId] = true);
@@ -660,13 +687,90 @@ function render(){
   if(ui.form && !ui.picking) openForm(true);
 }
 
+/* ---------- 天氣（Open-Meteo，免金鑰；營地座標＋海拔修正） ---------- */
+const WX = { mem:{}, pend:{}, err:{} };
+const WMO = c => c==null ? ['·',''] : c===0 ? ['☀️','晴'] : c<=2 ? ['🌤️','晴時多雲'] : c===3 ? ['☁️','陰'] : c<=48 ? ['🌫️','有霧']
+  : c<=57 ? ['🌦️','毛毛雨'] : c<=67 ? ['🌧️','雨'] : c<=77 ? ['🌨️','雪'] : c<=82 ? ['🌦️','陣雨'] : c<=86 ? ['🌨️','陣雪'] : ['⛈️','雷雨'];
+const WD = '日一二三四五六';
+const addDay = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0,10); };
+function wxTag(s, from, to, mode){
+  if(!s || !hasLoc(s) || !from) return '';
+  return `<div class="wx wx-${mode}" data-wx="${[s.lat, s.lng, from, to||from, mode].join('|')}"></div>`;
+}
+function wxSrc(lat, lng, from, to){
+  const today = todayStr(), lo = addDay(today, -90);
+  const ll = `latitude=${(+lat).toFixed(3)}&longitude=${(+lng).toFixed(3)}`;
+  if(to >= lo){   // 近期與未來：一次抓「過去 90 天＋未來 16 天」，每個營地只要一個請求
+    return { key:`f:${(+lat).toFixed(3)},${(+lng).toFixed(3)}`, ttl:3600e3,
+      url:`https://api.open-meteo.com/v1/forecast?${ll}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max&timezone=Asia%2FTaipei&past_days=90&forecast_days=16` };
+  }
+  return { key:`a:${(+lat).toFixed(3)},${(+lng).toFixed(3)}:${from}:${to}`, ttl:0,
+    url:`https://archive-api.open-meteo.com/v1/archive?${ll}&start_date=${from}&end_date=${to}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&timezone=Asia%2FTaipei` };
+}
+function wxCached(src){
+  if(WX.mem[src.key]) return WX.mem[src.key];
+  try{ const c = JSON.parse(localStorage.getItem('wx:' + src.key) || 'null'); if(c && (!src.ttl || Date.now() - c.at < src.ttl)){ WX.mem[src.key] = c; return c; } }catch(e){}
+  return null;
+}
+function wxLoad(src){
+  if(WX.pend[src.key] || WX.err[src.key]) return;
+  WX.pend[src.key] = fetch(src.url).then(r => { if(!r.ok) throw new Error(r.status); return r.json(); }).then(j => {
+    const d = j.daily || {}, days = {};
+    (d.time||[]).forEach((t, i) => days[t] = { code:d.weather_code[i], hi:d.temperature_2m_max[i], lo:d.temperature_2m_min[i], pop:d.precipitation_probability_max ? d.precipitation_probability_max[i] : null, mm:d.precipitation_sum[i], wind:d.wind_speed_10m_max[i] });
+    const c = { at:Date.now(), days }; WX.mem[src.key] = c;
+    try{ localStorage.setItem('wx:' + src.key, JSON.stringify(c)); }catch(e){}
+  }).catch(() => { WX.err[src.key] = true; }).finally(() => { delete WX.pend[src.key]; fillWeather(); });
+}
+const r0 = v => v==null ? '–' : Math.round(v);
+function wxDays(c, from, to){ const out = []; for(let d = from; d <= to && out.length < 16; d = addDay(d, 1)) if(c.days[d] && c.days[d].hi != null) out.push([d, c.days[d]]); return out; }
+function wxSummary(list){
+  const worst = list.reduce((a, [, x]) => (x.code||0) > (a.code||0) ? x : a, list[0][1]);
+  return { code:worst.code, lo:Math.min(...list.map(([, x]) => x.lo)), hi:Math.max(...list.map(([, x]) => x.hi)),
+    pop:list.some(([, x]) => x.pop != null) ? Math.max(...list.map(([, x]) => x.pop||0)) : null,
+    mm:list.reduce((a, [, x]) => a + (x.mm||0), 0), wind:Math.max(...list.map(([, x]) => x.wind||0)) };
+}
+function wxTips(sm){
+  const t = [];
+  if(sm.lo <= 10) t.push(`🥶 夜間低溫 ${r0(sm.lo)}°，帶保暖睡袋`);
+  if(sm.pop != null ? sm.pop >= 60 : sm.mm >= 10) t.push('☔ 可能下雨，天幕、雨具備好');
+  if(sm.wind >= 35) t.push('💨 風大，營釘營繩要加強');
+  if(sm.hi >= 32) t.push('🥵 白天高溫，注意防曬補水');
+  return t;
+}
+function fillWeather(){
+  const today = todayStr(), last = addDay(today, 15);
+  document.querySelectorAll('.wx[data-wx]:not([data-done])').forEach(el => {
+    const [lat, lng, from, to, mode] = el.dataset.wx.split('|');
+    if(from > last){ if(mode === 'trip'){ el.innerHTML = `<span class="hint">🌤️ ${addDay(from, -15).slice(5).replace('-','/')} 起會顯示這趟的天氣預報</span>`; } el.dataset.done = 1; return; }
+    const f = mode === 'strip' ? today : from, t = mode === 'strip' ? addDay(today, 6) : (to > last ? last : to);
+    const src = wxSrc(lat, lng, f, t), c = wxCached(src);
+    if(!c){ if(WX.err[src.key]){ el.dataset.done = 1; if(mode !== 'mini') el.innerHTML = '<span class="hint">天氣資料暫時無法取得</span>'; } else { el.innerHTML = mode === 'mini' ? '' : '<span class="hint">讀取天氣中…</span>'; wxLoad(src); } return; }
+    const list = wxDays(c, f, t); el.dataset.done = 1;
+    if(!list.length){ el.innerHTML = ''; return; }
+    if(mode === 'mini' || mode === 'past'){
+      const sm = wxSummary(list), [ic, lb] = WMO(sm.code);
+      el.innerHTML = `<span class="wxi">${ic}</span>${mode==='past' ? '當時' : ''}${lb} ${r0(sm.lo)}–${r0(sm.hi)}°${sm.pop!=null && mode==='mini' ? ` · ☔${sm.pop}%` : sm.mm >= 1 ? ` · 雨量 ${r0(sm.mm)}mm` : ''}`;
+      return;
+    }
+    const sm = wxSummary(list), tips = mode === 'trip' ? wxTips(sm).slice(0, 2) : [];
+    if(mode === 'trip'){
+      el.innerHTML = `<div class="wxrows">${list.slice(0, 4).map(([d, x]) => { const [ic, lb] = WMO(x.code); const dt = new Date(d + 'T00:00:00');
+        return `<div class="wxr"><b>${d.slice(5).replace('-','/')} ${WD[dt.getDay()]}</b><span class="wxi">${ic}</span><span>${lb}</span><span>${r0(x.lo)}–${r0(x.hi)}°</span>${x.pop!=null ? `<small>☔${x.pop}%</small>` : ''}</div>`; }).join('')}</div>${tips.length ? `<div class="wxtips">${tips.map(x => `<span>${x}</span>`).join('')}</div>` : ''}`;
+      return;
+    }
+    el.innerHTML = `<div class="wxdays">${list.map(([d, x]) => { const [ic, lb] = WMO(x.code); const dt = new Date(d + 'T00:00:00');
+      return `<div class="wxd${d===today?' today':''}" title="${lb}"><b>${d===today ? '今天' : d.slice(5).replace('-','/')}</b><small>週${WD[dt.getDay()]}</small><span class="wxi">${ic}</span><span>${r0(x.lo)}–${r0(x.hi)}°</span><small>${x.pop!=null ? '☔' + x.pop + '%' : ''}</small></div>`; }).join('')}</div>
+      ${tips.length ? `<div class="wxtips">${tips.map(x => `<span>${x}</span>`).join('')}</div>` : ''}${mode === 'strip' ? '<div class="hint" style="margin-top:4px">營地座標預報，已依海拔修正 · Open-Meteo</div>' : ''}`;
+  });
+}
+
 function nextHTML(){
   const up = plans().filter(t => (t.end||t.start) >= todayStr());
   if(!up.length) return '';
   const t = up[0], s = siteById(t.siteId) || {name:'?'}, d = daysTo(t.start);
   const cd = d>0 ? `${d}<small>天</small>` : (d===0 ? '今天！' : '露營中');
   return `<div class="next" data-site="${t.siteId}"><div class="thumb">${scene('n',1)}</div>
-    <div><div class="lbl">${d>0?'距離下一露還有':'出發囉'}</div><div class="cd">${cd}</div><div class="nm">${esc(s.name)}</div><div><span class="tag">第 ${numbering()[t.id]} 露</span><span class="tag terra">${BOOK[t.book]||'計畫中'}</span></div><div class="lbl">${fmtRange(t)} · ${nights(t)} 晚${s.county?' · '+SHORT(s.county):''}</div></div>
+    <div><div class="lbl">${d>0?'距離下一露還有':'出發囉'}</div><div class="cd">${cd}</div><div class="nm">${esc(s.name)}</div><div><span class="tag">第 ${numbering()[t.id]} 露</span><span class="tag terra">${BOOK[t.book]||'計畫中'}</span></div><div class="lbl">${fmtRange(t)} · ${nights(t)} 晚${s.county?' · '+SHORT(s.county):''}</div>${wxTag(s, t.start, t.end||t.start, 'trip')}</div>
     ${up.length>1?`<div class="more">還有 ${up.length-1} 個計畫 ›</div>`:'<div class="chev">›</div>'}</div>`;
 }
 function shade(c, max){
@@ -799,7 +903,7 @@ function calHTML(){
   let campDays30 = 0; for(let i=0;i<30;i++) if(tripsOn(addDays(today,i)).length) campDays30++;
   const upHTML = `<div class="upbox"><h4>🗓️ 接下來的露營安排<small>${up.length ? `未來 30 天有 ${campDays30} 天在露營` : ''}</small></h4>
     ${up.length ? up.map(t => { const s = siteById(t.siteId)||{name:'?'}; const d = daysTo(t.start);
-      return `<div class="up" data-trip="${t.id}"><span class="d">${t.start.slice(5).replace('-','/')}${t.end&&t.end!==t.start?' – '+t.end.slice(5).replace('-','/'):''}</span><span>${esc(s.name)}${isPlan(t)?`<span class="tag">${BOOK[t.book]||'計畫中'}</span>`:''}</span><span class="c">${d>0?'還有 '+d+' 天':'露營中 🔥'}</span></div>`; }).join('')
+      return `<div class="up" data-trip="${t.id}"><span class="d">${t.start.slice(5).replace('-','/')}${t.end&&t.end!==t.start?' – '+t.end.slice(5).replace('-','/'):''}</span><span>${esc(s.name)}${isPlan(t)?`<span class="tag">${BOOK[t.book]||'計畫中'}</span>`:''}</span><span class="c">${d>0?'還有 '+d+' 天':'露營中 🔥'}</span></div>${wxTag(s, t.start, t.end||t.start, 'mini').replace('class="wx','class="wx wx-up')}`; }).join('')
       : '<div class="hint">目前沒有排定的露營。點月曆上任一天就能加入計畫。</div>'}</div>`;
   let dayHTML = '';
   if(ui.calDay){
@@ -819,7 +923,7 @@ function planRow(t){
   const s = siteById(t.siteId) || {name:'（已刪除的露營區）', county:''}; const d = daysTo(t.start); const late = (t.end||t.start) < todayStr();
   return `<div class="trip planned" data-trip="${t.id}">
     <div class="n"><span class="k">${late?'日期':'倒數'}</span><span class="num">${late?'已過':d<=0?'GO':d}</span><span class="k">${late||d<=0?'':'天'}</span></div>
-    <div><div class="t">${esc(s.name)}<span class="tag terra">預計第 ${pn} 露</span><span class="tag ${late?'late':''}">${late?'待確認':(BOOK[t.book]||'計畫中')}</span></div><div class="m">${fmtRange(t)} · ${nights(t)} 晚${s.county?' · '+SHORT(s.county):''}${t.people?' · '+esc(t.people):''}</div>
+    <div><div class="t">${esc(s.name)}<span class="tag terra">預計第 ${pn} 露</span><span class="tag ${late?'late':''}">${late?'待確認':(BOOK[t.book]||'計畫中')}</span></div><div class="m">${fmtRange(t)} · ${nights(t)} 晚${s.county?' · '+SHORT(s.county):''}${t.people?' · '+esc(t.people):''}</div>${late ? '' : wxTag(s, t.start, t.end||t.start, 'mini')}
     ${late && !readOnly?`<div class="row" style="margin:6px 0 0"><button class="btn sm" data-done="${t.id}">✅ 標記為露過了</button></div>`:''}</div><div></div></div>`;
 }
 function tripRow(t, num){
@@ -864,12 +968,13 @@ function detailHTML(s, num){
     <div class="kv">${esc(s.county||'未指定縣市')} · 共 ${trips.length} 露${pls.length?' · '+pls.length+' 個計畫':''} · <a href="${maps}" target="_blank" rel="noopener">${hasLoc(s)?'在 Google 地圖開啟':'在 Google 地圖搜尋'}</a></div>
     ${hasLoc(s)?'':'<div class="note">📍 這個營地還沒有位置，按「編輯露營區」貼上座標，就會出現在地圖上。</div>'}
     ${s.note?`<div class="note">${esc(s.note)}</div>`:''}
+    ${hasLoc(s) ? `<div class="wxbox"><h4>營地未來 7 天天氣</h4>${wxTag(s, todayStr(), todayStr(), 'strip')}</div>` : ''}
     ${readOnly?'':`<div class="row"><button class="btn primary sm" data-act="again">＋ 再露一次</button><button class="btn sm" data-act="editsite">編輯露營區</button><button class="btn sm danger" data-act="delsite">刪除露營區</button></div>`}
   </div>
   ${pls.map(planRow).join('')}
   ${trips.map(t => `<div class="trip" data-trip="${t.id}">
     <div class="n">${num[t.id]==null ? '<span class="k">不計</span><span class="num" style="font-size:15px">—</span><span class="k">露數</span>' : `<span class="k">第</span><span class="num">${num[t.id]}</span><span class="k">露</span>`}</div>
-    <div><div class="t">${fmtRange(t)} · ${nights(t)} 晚</div><div class="m">${t.people?'同行：'+esc(t.people):''}</div>${t.note?`<div class="note">${esc(t.note)}</div>`:''}</div>
+    <div><div class="t">${fmtRange(t)} · ${nights(t)} 晚</div><div class="m">${t.people?'同行：'+esc(t.people):''}</div>${t.start && t.start >= '1940-01-01' && (t.end||t.start) < todayStr() ? wxTag(s, t.start, t.end||t.start, 'past') : ''}${t.note?`<div class="note">${esc(t.note)}</div>`:''}</div>
     <div class="stars">${stars(t.rating)}</div></div>`).join('')}
   </div>`;
 }
