@@ -290,6 +290,47 @@ body{padding-top:env(safe-area-inset-top)}
   .mt-trips .tabs [data-tab=timeline],.mt-trips .tabs [data-tab=sites],.mt-trips .tabs [data-tab=counties]{display:none}
   .mt-map .legend{font-size:11px}
 }
+
+.gear{padding:0 2px 8px}
+.gtop{position:sticky;top:0;z-index:2;background:var(--card);padding:8px 10px 10px;border-bottom:1px solid var(--line);margin:0 -2px 6px}
+.gchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:6px}
+.gchips::-webkit-scrollbar{display:none}
+.gchips .chip{flex-shrink:0;font-size:12.5px;padding:4px 11px}
+.gsum{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.gsum b{font-family:var(--serif);font-size:16px}
+.gbtns{display:flex;gap:6px}
+.gprog{position:relative;height:22px;background:#EFE8DC;border-radius:999px;overflow:hidden;margin-top:8px}
+.gprog i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#8FA174,var(--forest));border-radius:999px;transition:width .3s}
+.gprog span{position:relative;display:block;text-align:center;font-size:12px;line-height:22px;color:var(--ink);font-weight:500}
+.gtop .wx{margin-top:6px}
+.gcat{margin:4px 8px 8px;border:1px solid var(--line);border-radius:14px;background:#FFFDF9;overflow:hidden}
+.gch{display:flex;align-items:center;gap:8px;padding:9px 12px;font-family:var(--serif);font-weight:600;cursor:pointer;background:#F7F2E9}
+.gch>span:first-child,.gch .gin{flex:1}
+.gch small{font-family:var(--sans);font-weight:400;color:var(--muted);font-size:12px}
+.gar{transition:transform .2s;color:var(--muted)}
+.gcat.fold .gar{transform:rotate(-90deg)}
+.gcat.fold .gitems{display:none}
+.gitems{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.gi{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid #F0E9DD;font-size:14px;cursor:pointer;min-height:24px}
+.gi input[type=checkbox]{width:18px;height:18px;accent-color:var(--forest);flex-shrink:0;margin:0}
+.gi.on span{color:var(--muted);text-decoration:line-through}
+.gi.edit,.gi.add{grid-column:1/-1;cursor:default}
+.gin{flex:1;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:14px;background:#fff;min-width:0}
+.gch .gin{font-family:var(--serif);font-weight:600}
+.gx{border:0;background:transparent;color:var(--danger);cursor:pointer;font-size:14px;padding:4px 6px}
+.gearline{margin-top:6px;font-size:12.5px;color:var(--forest);font-weight:500;cursor:pointer;display:inline-block}
+@media (max-width:860px){
+  .mnav button{font-size:11.5px;letter-spacing:.06em}
+  .mt-gear{height:100vh;height:100dvh;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;padding-top:12px}
+  .mt-gear>.hero,.mt-gear>.tiles,.mt-gear>.stats,.mt-gear>.next,.mt-gear>.welcome,.mt-gear>.years{display:none}
+  .mt-gear .mtop{display:flex}
+  .mt-gear .viewbar{margin:0 0 8px;flex-shrink:0;font-size:13px;padding:6px 12px}
+  .mt-gear .grid{flex:1;min-height:0;display:flex;flex-direction:column;align-items:stretch}
+  .mt-gear .mapcard,.mt-gear .tabs{display:none}
+  .mt-gear .panel{flex:1;min-height:0;max-height:none}
+  .mt-map .tabs [data-tab=gear],.mt-trips .tabs [data-tab=gear]{display:none}
+  .mt-home .next .gearline{display:block}
+}
 </style>
 </head>
 <body>
@@ -608,18 +649,23 @@ function countyAt(lng, lat){
 }
 
 /* ---------- UI state ---------- */
-const ui = { mtab:'home', view:null, calMonth:null, calDay:null, tab:'timeline', year:'all', siteSel:null, picking:false, form:null, rating:0 };
+const ui = { mtab:'home', gearTrip:null, gearEdit:false, gearFold:null, gearFocus:null, view:null, calMonth:null, calDay:null, tab:'timeline', year:'all', siteSel:null, picking:false, form:null, rating:0 };
 
 function filtered(){ const d = S.trips.filter(t=>!isPlan(t)); return ui.year==='all' ? d : d.filter(t => yearOf(t)===ui.year); }
 function plans(){ return S.trips.filter(isPlan).sort((a,b)=>(a.start||'').localeCompare(b.start||'')); }
 const BOOK = {want:'想去',tbc:'待確認',booked:'已預訂',paid:'已付訂金'};
 
 /* ---------- render ---------- */
+const GEAR_ICON = '<svg viewBox="0 0 24 24"><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><rect x="4" y="7" width="16" height="14" rx="3"/><path d="M4 12h16M10 12v2h4v-2"/></svg>';
 function isMobile(){ return window.matchMedia('(max-width:860px)').matches; }
 function mtopHTML(trips, nSites){
   if(ui.mtab === 'map'){
     const num = numbering(); const done = ui.year === 'all' ? Math.max(0, ...trips.map(x => num[x.id]).filter(x => x != null)) : trips.length;
     return `<div class="mtop"><div><h2>地圖</h2><span class="hint">${ui.year === 'all' ? '' : ui.year + ' 年 · '}${done} 露 · ${nSites} 處露營區</span></div>${readOnly ? '' : `<button class="btn primary sm" data-act="add">＋ 新增一露</button>`}</div>`;
+  }
+  if(ui.mtab === 'gear'){
+    const pr = gearProgress(gearTarget());
+    return `<div class="mtop"><div><h2>裝備</h2><span class="hint">已備 ${pr.done} / ${pr.total} 項</span></div></div>`;
   }
   if(ui.mtab === 'trips'){
     const n = plans().length;
@@ -637,8 +683,11 @@ function render(){
   const maxC = Math.max(1, ...Object.values(countyCount));
 
   const root = document.getElementById('root');
+  const keepScroll = (() => { const pb = root.querySelector('.panel .pbody'); return pb ? { tab: ui.tab + '|' + ui.siteSel, top: pb.scrollTop } : null; })();
   if(isMobile()){
     if(ui.siteSel && ui.mtab === 'home'){ ui.mtab = 'map'; if(['cal','plans'].includes(ui.tab)) ui.tab = 'timeline'; }
+    if(ui.mtab === 'gear') ui.tab = 'gear';
+    else if(ui.tab === 'gear') ui.mtab = 'gear';
     if(ui.mtab === 'trips' && !['cal','plans'].includes(ui.tab)) ui.tab = 'cal';
     if(ui.mtab === 'map' && ['cal','plans'].includes(ui.tab)) ui.mtab = 'trips';
   }
@@ -671,9 +720,10 @@ function render(){
     <div class="panel">${panelHTML(trips, num, countyCount, maxC)}</div>
   </div>
   <div class="status ${statusWarn?'warn':''}" id="status">${esc(statusMsg)}</div>
-  <nav class="mnav">${[['home','首頁',ICON.tent],['map','地圖',ICON.pin],['trips','行程',ICON.cal]].map(([k,l,ic]) => `<button data-mtab="${k}" class="${ui.mtab===k?'on':''}">${ic}<span>${l}</span></button>`).join('')}</nav>
+  <nav class="mnav">${[['home','首頁',ICON.tent],['map','地圖',ICON.pin],['trips','行程',ICON.cal],['gear','裝備',GEAR_ICON]].map(([k,l,ic]) => `<button data-mtab="${k}" class="${ui.mtab===k?'on':''}">${ic}<span>${l}</span></button>`).join('')}</nav>
   <div class="modal-bg" id="modal"><div class="modal" id="modalBox"></div></div>`;
   bind();
+  if(keepScroll && keepScroll.tab === ui.tab + '|' + ui.siteSel){ const pb = root.querySelector('.panel .pbody'); if(pb) pb.scrollTop = keepScroll.top; }
   fillWeather();
   if(M3){
     const cnt = {}; trips.forEach(t => cnt[t.siteId] = (cnt[t.siteId]||0)+1);
@@ -764,13 +814,95 @@ function fillWeather(){
   });
 }
 
+/* ---------- 裝備清單（可自訂項目，每趟行程各自勾選） ---------- */
+const GEAR_DEFAULT = [
+  ['帳篷與睡眠', ['帳篷','天幕','營柱','營釘、營槌','營繩','地布','睡袋','睡墊／充氣床','枕頭']],
+  ['桌椅與照明', ['露營桌','露營椅','營燈','頭燈／手電筒','延長線','行動電源']],
+  ['炊具與飲食', ['卡式爐、瓦斯罐','鍋具','餐具、杯子','砧板、刀具','冰箱／保冷袋','冰塊','飲用水','食材','調味料','咖啡器具']],
+  ['衣物與個人', ['保暖外套','雨衣、雨鞋','換洗衣物','盥洗用品','毛巾','拖鞋']],
+  ['清潔與安全', ['垃圾袋','紙巾、抹布','洗碗精、菜瓜布','急救包','防蚊液','防曬乳']],
+  ['出發前確認', ['營地預訂資訊','現金','手機充電線','車子電量／油量']]
+];
+function gearData(create){
+  if(S.gear && Array.isArray(S.gear.cats)) return S.gear;
+  // 第一次使用時建立預設清單並放進資料（之後的勾選都以這組 id 為準）
+  S.gear = { cats: GEAR_DEFAULT.map(([name, items]) => ({ id:uid(), name, items: items.map(n => ({ id:uid(), name:n })) })), packed:[] };
+  return S.gear;
+}
+function gearTrips(){ return plans().filter(t => (t.end||t.start) >= todayStr()); }
+function gearTarget(){
+  const ups = gearTrips();
+  if(ui.gearTrip === 'general') return null;
+  return ups.find(t => t.id === ui.gearTrip) || ups[0] || null;
+}
+function packedSet(trip){ const g = gearData(); return new Set((trip ? trip.packed : g.packed) || []); }
+function gearProgress(trip){ const g = gearData(), p = packedSet(trip); const all = g.cats.flatMap(c => c.items); return { done: all.filter(i => p.has(i.id)).length, total: all.length }; }
+function gearHTML(){
+  const g = gearData(), ups = gearTrips(), trip = gearTarget(), p = packedSet(trip), pr = gearProgress(trip), edit = ui.gearEdit && !readOnly;
+  const s = trip ? siteById(trip.siteId) : null;
+  const pct = pr.total ? Math.round(pr.done / pr.total * 100) : 0;
+  const chips = ups.map(t => { const ss = siteById(t.siteId) || {name:'?'}; return `<button class="chip ${trip && trip.id===t.id ? 'on' : ''}" data-gtrip="${t.id}">${t.start.slice(5).replace('-','/')} ${esc(ss.name)}</button>`; }).join('')
+    + `<button class="chip ${!trip ? 'on' : ''}" data-gtrip="general">一般清單</button>`;
+  return `<div class="gear">
+    <div class="gtop">
+      <div class="gchips">${chips}</div>
+      <div class="gsum"><div><b>${trip ? esc(s ? s.name : '') : '一般清單'}</b><span class="hint">${trip ? ` · ${fmtRange(trip)}${daysTo(trip.start) > 0 ? ' · 還有 ' + daysTo(trip.start) + ' 天' : ''}` : ' · 不綁定行程'}</span></div>
+        ${readOnly ? '' : `<div class="gbtns">${pr.done ? '<button class="btn sm" data-g="reset">全部取消</button>' : ''}<button class="btn sm ${edit ? 'primary' : ''}" data-g="edit">${edit ? '完成編輯' : '✏️ 編輯清單'}</button></div>`}</div>
+      <div class="gprog"><i style="width:${pct}%"></i><span>已備 ${pr.done} / ${pr.total}${pct===100 && pr.total ? ' · 全部備齊 🎉' : ''}</span></div>
+      ${trip && s ? wxTag(s, trip.start, trip.end||trip.start, 'mini') : ''}
+    </div>
+    ${g.cats.map(c => { const n = c.items.filter(i => p.has(i.id)).length, fold = !edit && ui.gearFold && ui.gearFold[c.id];
+      return `<div class="gcat${fold ? ' fold' : ''}">
+        <div class="gch" data-g="fold" data-id="${c.id}">${edit ? `<input class="gin" data-g="rencat" data-id="${c.id}" value="${esc(c.name)}" maxlength="20">` : `<span>${esc(c.name)}</span>`}
+          <small>${n}/${c.items.length}</small>${edit ? `<button class="gx" data-g="delcat" data-id="${c.id}" title="刪除分類">🗑</button>` : '<span class="gar">▾</span>'}</div>
+        <div class="gitems">${c.items.map(i => edit
+          ? `<div class="gi edit"><input class="gin" data-g="ren" data-cat="${c.id}" data-id="${i.id}" value="${esc(i.name)}" maxlength="30"><button class="gx" data-g="del" data-cat="${c.id}" data-id="${i.id}" title="刪除">✕</button></div>`
+          : `<label class="gi${p.has(i.id) ? ' on' : ''}"><input type="checkbox" data-g="chk" data-id="${i.id}" ${p.has(i.id) ? 'checked' : ''} ${readOnly ? 'disabled' : ''}><span>${esc(i.name)}</span></label>`).join('')}
+          ${edit ? `<div class="gi add"><input class="gin" data-g="newitem" data-cat="${c.id}" placeholder="＋ 新增項目，按 Enter" maxlength="30"></div>` : ''}
+        </div></div>`; }).join('')}
+    ${edit ? `<div class="gcat"><div class="gi add"><input class="gin" data-g="newcat" placeholder="＋ 新增分類，按 Enter" maxlength="20"></div></div><div class="hint" style="padding:6px 4px 10px">清單是共用的，每趟行程的勾選各自記錄。<a data-g="restore" style="text-decoration:underline;cursor:pointer;margin-left:6px">還原成預設清單</a></div>` : ''}
+  </div>`;
+}
+function bindGear(root){
+  const box = root.querySelector('.gear'); if(!box) return;
+  const g = () => gearData(true);
+  const cat = id => g().cats.find(c => c.id === id);
+  box.querySelectorAll('[data-gtrip]').forEach(b => b.onclick = () => { ui.gearTrip = b.dataset.gtrip; render(); });
+  box.querySelectorAll('[data-g="chk"]').forEach(cb => cb.onchange = () => {
+    const trip = gearTarget(); const gd = g(); const arr = new Set((trip ? trip.packed : gd.packed) || []);
+    cb.checked ? arr.add(cb.dataset.id) : arr.delete(cb.dataset.id);
+    if(trip) trip.packed = [...arr]; else gd.packed = [...arr];
+    cb.closest('.gi').classList.toggle('on', cb.checked);
+    const pr = gearProgress(trip), pct = pr.total ? Math.round(pr.done / pr.total * 100) : 0;
+    box.querySelector('.gprog i').style.width = pct + '%';
+    box.querySelector('.gprog span').textContent = `已備 ${pr.done} / ${pr.total}${pct===100 ? ' · 全部備齊 🎉' : ''}`;
+    const mh = document.querySelector('.mt-gear .mtop .hint'); if(mh) mh.textContent = `已備 ${pr.done} / ${pr.total} 項`;
+    const c = cb.closest('.gcat'), all = c.querySelectorAll('[data-g="chk"]'); c.querySelector('.gch small').textContent = `${[...all].filter(x => x.checked).length}/${all.length}`;
+    save();
+  });
+  box.querySelectorAll('[data-g="fold"]').forEach(h => h.onclick = e => { if(ui.gearEdit || e.target.closest('input,button')) return; ui.gearFold = ui.gearFold || {}; ui.gearFold[h.dataset.id] = !ui.gearFold[h.dataset.id]; h.parentElement.classList.toggle('fold'); });
+  const btn = (n, f) => box.querySelectorAll(`[data-g="${n}"]`).forEach(b => b.onclick = e => { e.stopPropagation(); f(b); });
+  btn('edit', () => { ui.gearEdit = !ui.gearEdit; render(); });
+  btn('reset', () => { const trip = gearTarget(); if(trip) trip.packed = []; else g().packed = []; render(); save(); });
+  btn('del', b => { const c = cat(b.dataset.cat); c.items = c.items.filter(i => i.id !== b.dataset.id); render(); save(); });
+  btn('delcat', b => { const c = cat(b.dataset.id); if(c.items.length && !confirm(`刪除「${c.name}」和裡面的 ${c.items.length} 個項目？`)) return; g().cats = g().cats.filter(x => x.id !== c.id); render(); save(); });
+  btn('restore', () => { if(!confirm('還原成預設清單？你自訂的項目會被取代。')) return; delete S.gear; gearData(true); render(); save(); });
+  box.querySelectorAll('[data-g="ren"]').forEach(inp => inp.onchange = () => { const v = inp.value.trim(); const it = cat(inp.dataset.cat).items.find(i => i.id === inp.dataset.id); if(v && it){ it.name = v; save(); } else inp.value = it ? it.name : ''; });
+  box.querySelectorAll('[data-g="rencat"]').forEach(inp => inp.onchange = () => { const v = inp.value.trim(); const c = cat(inp.dataset.id); if(v){ c.name = v; save(); } else inp.value = c.name; });
+  box.querySelectorAll('[data-g="newitem"]').forEach(inp => inp.onkeydown = e => { if(e.key !== 'Enter' || e.isComposing) return; const v = inp.value.trim(); if(!v) return;
+    cat(inp.dataset.cat).items.push({ id:uid(), name:v }); ui.gearFocus = inp.dataset.cat; render(); save(); });
+  box.querySelectorAll('[data-g="newcat"]').forEach(inp => inp.onkeydown = e => { if(e.key !== 'Enter' || e.isComposing) return; const v = inp.value.trim(); if(!v) return;
+    const c = { id:uid(), name:v, items:[] }; g().cats.push(c); ui.gearFocus = c.id; render(); save(); });
+  if(ui.gearFocus){ const f = box.querySelector(`[data-g="newitem"][data-cat="${ui.gearFocus}"]`); ui.gearFocus = null; if(f){ f.focus(); f.scrollIntoView({block:'nearest'}); } }
+}
+
 function nextHTML(){
   const up = plans().filter(t => (t.end||t.start) >= todayStr());
   if(!up.length) return '';
   const t = up[0], s = siteById(t.siteId) || {name:'?'}, d = daysTo(t.start);
   const cd = d>0 ? `${d}<small>天</small>` : (d===0 ? '今天！' : '露營中');
   return `<div class="next" data-site="${t.siteId}"><div class="thumb">${scene('n',1)}</div>
-    <div><div class="lbl">${d>0?'距離下一露還有':'出發囉'}</div><div class="cd">${cd}</div><div class="nm">${esc(s.name)}</div><div><span class="tag">第 ${numbering()[t.id]} 露</span><span class="tag terra">${BOOK[t.book]||'計畫中'}</span></div><div class="lbl">${fmtRange(t)} · ${nights(t)} 晚${s.county?' · '+SHORT(s.county):''}</div>${wxTag(s, t.start, t.end||t.start, 'trip')}</div>
+    <div><div class="lbl">${d>0?'距離下一露還有':'出發囉'}</div><div class="cd">${cd}</div><div class="nm">${esc(s.name)}</div><div><span class="tag">第 ${numbering()[t.id]} 露</span><span class="tag terra">${BOOK[t.book]||'計畫中'}</span></div><div class="lbl">${fmtRange(t)} · ${nights(t)} 晚${s.county?' · '+SHORT(s.county):''}</div>${wxTag(s, t.start, t.end||t.start, 'trip')}${(() => { const pr = gearProgress(t); return `<div class="gearline" data-gearfor="${t.id}">🎒 裝備已備 ${pr.done}/${pr.total} ›</div>`; })()}</div>
     ${up.length>1?`<div class="more">還有 ${up.length-1} 個計畫 ›</div>`:'<div class="chev">›</div>'}</div>`;
 }
 function shade(c, max){
@@ -937,9 +1069,11 @@ function tripRow(t, num){
 
 function panelHTML(trips, num, countyCount, maxC){
   if(ui.siteSel && siteById(ui.siteSel)) return detailHTML(siteById(ui.siteSel), num);
-  const tabs = `<div class="tabs">${[['timeline','時間軸'],['cal','月曆'],['plans','計畫中'+(plans().length?' '+plans().length:'')],['sites','露營區'],['counties','縣市']].map(([k,l])=>`<button class="${ui.tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('')}</div>`;
+  const tabs = `<div class="tabs">${[['timeline','時間軸'],['cal','月曆'],['plans','計畫中'+(plans().length?' '+plans().length:'')],['sites','露營區'],['counties','縣市'],['gear','裝備']].map(([k,l])=>`<button class="${ui.tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('')}</div>`;
   let body = '';
-  if(ui.tab==='cal'){
+  if(ui.tab==='gear'){
+    body = gearHTML();
+  } else if(ui.tab==='cal'){
     body = calHTML();
   } else if(ui.tab==='plans'){
     body = plans().map(planRow).join('') || `<div class="empty"><b>還沒有計畫</b>訂好營位了嗎？按「📅 加入計畫」先記下來，<br>這裡會幫你倒數出發日。</div>`;
@@ -1309,10 +1443,13 @@ function bind(){
   root.querySelectorAll('[data-mtab]').forEach(b => b.onclick = () => {
     const k = b.dataset.mtab; if(k === ui.mtab && !ui.siteSel) return;
     ui.mtab = k; ui.siteSel = null;
+    if(k === 'gear') ui.tab = 'gear';
     if(k === 'trips' && !['cal','plans'].includes(ui.tab)) ui.tab = 'cal';
-    if(k === 'map' && ['cal','plans'].includes(ui.tab)) ui.tab = 'timeline';
+    if(k === 'map' && ['cal','plans','gear'].includes(ui.tab)) ui.tab = 'timeline';
     render(); window.scrollTo(0, 0);
   });
+  bindGear(root);
+  root.querySelectorAll('[data-gearfor]').forEach(el => el.onclick = e => { e.stopPropagation(); ui.gearTrip = el.dataset.gearfor; ui.siteSel = null; if(isMobile()) ui.mtab = 'gear'; else ui.tab = 'gear'; render(); if(!isMobile()) document.querySelector('.panel').scrollIntoView({behavior:'smooth', block:'start'}); else window.scrollTo(0,0); });
   root.querySelectorAll('.panel [data-site], .next[data-site]').forEach(el => el.onclick = () => { ui.siteSel = el.dataset.site; focusSite(ui.siteSel); render(); });
   root.querySelectorAll('[data-trip]').forEach(el => el.onclick = () => { if(!readOnly) openForm(false, S.trips.find(t=>t.id===el.dataset.trip)); });
   const act = (n, f) => root.querySelectorAll(`[data-act="${n}"]`).forEach(b => b.onclick = f);
