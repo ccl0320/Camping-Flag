@@ -1466,6 +1466,7 @@ function bind(){
     const k = b.dataset.mtab; if(k === ui.mtab && !ui.siteSel) return;
     ui.mtab = k; ui.siteSel = null;
     if(k === 'gear') ui.tab = 'gear';
+    else if(ui.tab === 'gear') ui.tab = k === 'trips' ? 'cal' : 'timeline';   // 離開裝備頁時把面板切回一般分頁，否則會被導回裝備
     if(k === 'trips' && !['cal','plans'].includes(ui.tab)) ui.tab = 'cal';
     if(k === 'map' && ['cal','plans','gear'].includes(ui.tab)) ui.tab = 'timeline';
     render(); window.scrollTo(0, 0);
