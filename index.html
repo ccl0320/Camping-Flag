@@ -553,21 +553,29 @@ function viewBanner(){
 
 /* ---------- App 自動檢查更新（只在 Android App 內執行） ---------- */
 const upd = { latest:null, url:'', notes:'', checking:false };
-async function checkUpdate(manual){
+async function checkUpdate(manual, coldStart){
   if(!IS_APP || upd.checking) return;
   const KEY = 'camping-upd-last';
-  if(!manual){ try{ if(Date.now() - (+localStorage.getItem(KEY)||0) < 30*60*1000) return; }catch(e){} }
+  // 冷啟動與手動一定檢查；從背景切回來時 10 分鐘內只查一次（只記錄成功的檢查）
+  if(!manual && !coldStart){ try{ if(Date.now() - (+localStorage.getItem(KEY)||0) < 10*60*1000) return; }catch(e){} }
   upd.checking = true; if(manual) setStatus('正在檢查更新…');
-  try{
+  let info = null, why = '';
+  try{   // 1) repo 裡的版本檔（raw.githubusercontent.com，沒有 API 次數限制）
+    const r = await fetch('https://raw.githubusercontent.com/' + GH_REPO + '/main/app-version.json?t=' + Date.now(), { cache:'no-store' });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json(); if(j && j.build && j.url) info = { n:+j.build, url:j.url };
+  }catch(e){ why = '版本檔 ' + (e.message||e); }
+  if(!info){ try{   // 2) 備援：GitHub Releases API
     const r = await fetch('https://api.github.com/repos/' + GH_REPO + '/releases/latest', { headers:{ Accept:'application/vnd.github+json' }, cache:'no-store' });
     if(!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
-    const n = parseInt(String(j.tag_name||'').replace(/\D+/g,''), 10) || 0;
-    const a = (j.assets||[]).find(x => /\.apk$/i.test(x.name));
+    const j = await r.json(); const a = (j.assets||[]).find(x => /\.apk$/i.test(x.name));
+    if(a) info = { n: parseInt(String(j.tag_name||'').replace(/\D+/g,''), 10) || 0, url:a.browser_download_url };
+  }catch(e){ why += '；API ' + (e.message||e); } }
+  if(info){
     try{ localStorage.setItem(KEY, String(Date.now())); }catch(e){}
-    if(a && n > window.__APP_BUILD__){ upd.latest = n; upd.url = a.browser_download_url; upd.notes = (j.body||'').split('\n').filter(l => /^[-•*]/.test(l.trim())).slice(0,4).join('\n'); showUpdate(); }
+    if(info.n > window.__APP_BUILD__){ upd.latest = info.n; upd.url = info.url; showUpdate(); }
     else if(manual) setStatus(`已經是最新版本（v${window.__APP_BUILD__}）`);
-  }catch(e){ if(manual) setStatus('檢查更新失敗，請確認網路後再試', true); }
+  } else if(manual) setStatus('檢查更新失敗，請確認網路後再試（' + why + '）', true);
   upd.checking = false;
 }
 function showUpdate(){
@@ -578,7 +586,7 @@ function showUpdate(){
   document.body.appendChild(bar);
 }
 if(IS_APP){
-  setTimeout(() => checkUpdate(false), 2500);
+  setTimeout(() => checkUpdate(false, true), 2500);
   document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') checkUpdate(false); });
 }
 
